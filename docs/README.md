@@ -8,17 +8,25 @@ Built by [Advik](https://github.com/Advik777).
 
 ## The problem
 
-When a team uses Claude Code, every person's instance works in complete isolation. The frontend engineer's Claude has no idea what the backend engineer's Claude is building. You end up with APIs that don't match the UI, decisions made twice, and one person driving while everyone else watches.
+Claude Code is a powerful tool for individual developers. But when a team uses it, each person's instance operates in complete isolation — and that isolation creates a category of bugs that no amount of individual skill prevents.
 
-CollClaude fixes this.
+Consider a team of two. The backend developer asks their Claude Code to build a user endpoint. It returns `{ id, name, email }`. Meanwhile, the frontend developer asks their Claude Code to build the profile component. With no visibility into what the backend is doing, it builds against `{ userId, fullName, emailAddress }`. Both agents did exactly what they were asked. Both outputs are correct in isolation. The integration is broken.
+
+This is not a workflow problem. It is a context problem. The result:
+
+- **Schema mismatches** — agents independently define the same data structures differently, discovered only at integration time.
+- **Duplicate decisions** — two agents relitigate the same architectural tradeoffs with no awareness of each other, and may land on different answers.
+- **Silent incompatibility** — agents build toward the same goal along diverging paths, with no conflict surfaced until the work is done.
+
+CollClaude solves this by giving every agent on the team a shared context — so no agent ever builds in ignorance of what the rest of the team has decided.
 
 ---
 
 ## What it does
 
-CollClaude is a Claude skill. Install it, start a session, share a four-character code with your teammates. From that moment, every Claude Code instance on your team shares the same context — what each person is building, what decisions have been made, what's still open. Each agent works as if it's been briefed by every other agent on the team.
+CollClaude is a Claude skill — a folder you drop into `~/.claude/skills/` that gives your Claude Code new abilities. Once installed, it connects your agent to your teammates' agents through a shared context store. Every agent on the team knows what the others are building, what decisions have been made, and what's still open.
 
-No new IDE. No new app. No new editor. It lives inside Claude and works alongside whatever editor you already use.
+No new IDE. No new app. No new editor. Works alongside whatever editor you already use.
 
 ---
 
@@ -51,45 +59,46 @@ From there, your agents coordinate automatically. The backend Claude knows what 
 
 ## Installation
 
-**Requirements:** Python 3.10+, Claude Code, Claude Pro / Max / Team / Enterprise with Code Execution enabled.
+**Requirements:** Claude Code, Claude Pro / Max / Team / Enterprise with Code Execution enabled.
 
+**Everyone on the team:**
 ```bash
-# Clone the repo
-git clone https://github.com/Advik777/collaude
-cd collaude
-
-# Install broker dependencies
-pip install -r requirements.txt
-
-# Install the skill
+# Copy the skill into your Claude skills folder
 cp -r skill ~/.claude/skills/collaude
 ```
+
+That's it. Claude Code picks it up automatically on the next session. No pip install, no setup, no configuration.
+
+**Session host only** (the person who runs `/collaude start`):
+```bash
+pip install -r requirements.txt
+```
+
+The host needs the broker dependencies. Teammates who only join never touch this.
 
 ---
 
 ## Starting a session
 
-The person who starts the session hosts the broker. It starts automatically — no manual setup needed.
+The person starting the session runs:
 
 ```bash
-# In Claude Code
 /collaude start "your-project-name"
 ```
 
-CollClaude starts the broker on your machine and opens an ngrok tunnel automatically. You'll see a session code. Share it with your team.
+CollClaude starts the broker on your machine and opens an ngrok tunnel automatically. You'll get a session code and a URL — share both with your team.
 
 ---
 
 ## Joining a session
 
+Everyone else runs one command in their Claude Code:
+
 ```bash
-# In Claude Code
 /collaude join CCL-XXXX https://abc123.ngrok.io
 ```
 
-Your Claude Code connects to the host's broker using the ngrok URL, loads the shared context store, and your agent is briefed on everything the team has built and decided so far.
-
-> **Note:** In v0.1, the host shares both the session code and the ngrok URL together. This is a known limitation — a rendezvous service that resolves codes to URLs automatically is planned before public release.
+Your agent connects, loads the shared context, and is briefed on everything the team has built and decided so far. No broker to run, no dependencies to install.
 
 ---
 
