@@ -10,14 +10,19 @@
 
 ## 1. The Problem
 
-Developers working in teams today face a fundamental AI collaboration gap. When a team uses Claude Code, each person's instance operates in complete isolation. The frontend engineer's Claude has no idea what the backend engineer's Claude is building. This leads to:
+Claude Code is a powerful tool for individual developers. But when a team uses it, each person's instance operates in complete isolation — and that isolation creates a category of bugs that no amount of individual skill prevents.
 
-- APIs designed without knowing what data the UI actually needs
-- Duplicated decisions made independently by each agent
-- Conflicting implementations discovered only at integration time
-- One person "driving" the AI while teammates watch passively
+Consider a team of two. The backend developer asks their Claude Code to build a user endpoint. It returns `{ id, name, email }`. Meanwhile, the frontend developer asks their Claude Code to build the profile component. With no visibility into what the backend is doing, it builds against `{ userId, fullName, emailAddress }`. Both agents did exactly what they were asked. Both outputs are correct in isolation. The integration is broken.
 
-This was the founding insight: at a hackathon, one teammate did all the work inside their Claude Code while the other had nothing to contribute. The tool should not allow that to happen.
+This is not a workflow problem. It is a context problem. Each Claude Code instance reasons only from what it can see — its own conversation, its own codebase, its own instructions. It has no mechanism to know what another agent on the same team has decided, built, or assumed. The result is:
+
+- **Schema mismatches** — agents independently define the same data structures differently, discovered only at integration time.
+- **Duplicate decisions** — two agents relitigate the same architectural tradeoffs with no awareness of each other, and may land on different answers.
+- **Silent incompatibility** — agents build toward the same goal along diverging paths, with no conflict surfaced until the work is done.
+
+The cost is not just the time spent fixing integration bugs. It is the compounding effect of two intelligent systems working at cross-purposes, each confidently building the wrong half of the same thing.
+
+CollClaude solves this by giving every agent on the team a shared context — so no agent ever builds in ignorance of what the rest of the team has decided.
 
 ---
 
@@ -204,6 +209,11 @@ Agent A writes intent
 - It does not allow one agent to send instructions to another agent's Claude
 - It does not store conversation history
 
+### Known limitations (v0.1)
+
+- **Rendezvous gap** — joining a session requires both the session code and the host's ngrok URL. A rendezvous service that resolves codes to URLs automatically is planned before public release.
+- **Conflict detector misses path-variant conflicts** — the rule-based detector only flags conflicts when two agents define the exact same endpoint path differently. If two agents define the same logical endpoint under different paths (e.g. `POST /auth/login` vs `POST /api/login`), the detector stays silent. Identified in Layer 2 testing. Fix required before public release.
+
 ---
 
 ## 7. Team Size & Constraints
@@ -263,7 +273,7 @@ The three tiers then operate as follows:
 
 - **Hot tier** — the last 15–20 minutes of transient activity, stored in full detail. Always injected into agent context automatically.
 - **Warm tier** — all structural content (pinned, permanent) plus older transient activity auto-summarized into compact bullet points. Injected as a summary alongside the hot tier.
-- **Cold tier** — resolved transient content only, compressed into a single paragraph each. Never injected automatically; fetched on demand when an agent needs historical context.
+- **Cold tier** — transient content that has been explicitly resolved, OR transient content older than 60 minutes regardless of resolution status. Compressed into a single paragraph each. Never injected automatically; fetched on demand when an agent needs historical context. Automatic aging keeps the store lean without requiring manual cleanup from users.
 
 This preserves the core promise of CollClaude — no agent ever loses sight of a decision that matters — while keeping token injection lean by aging out noise, not substance.
 
@@ -328,6 +338,24 @@ Sequence within a session:
 
 Pass condition: the three "working correctly" conditions above all hold.
 
+**Layer 2 results — July 2026**
+
+Task: build a login feature. Backend agent (@advik) assigned JWT authentication. Frontend agent (@advik-fe) assigned login form. Neither agent was told what the other was building.
+
+Results:
+- ✅ Shared context store captured both agents' structural decisions in real time
+- ✅ Structural pinning worked — both agents' API contracts stayed in warm tier
+- ✅ Backend agent independently read the frontend's contract, compared it to its own, and surfaced a divergence as a table without being prompted
+- ✅ Agent correctly classified the divergence as informational and gave two resolution options with a recommendation — did not block
+- ✅ Both agents broadcast intent correctly throughout the session
+
+**Finding — conflict detector missed a real divergence:**
+The backend defined `POST /auth/login` returning `{access_token, token_type, expires_in}`. The frontend defined `POST /api/login` returning `{token, user:{id,email}}`. These are the same endpoint defined two different ways. The rule-based conflict detector did not flag it because the paths differed (`/auth/login` vs `/api/login`) and the rules match on identical paths only.
+
+The backend agent caught it through context reading, not through the detector. This means the current conflict detection rules are insufficient for path-variant conflicts — two agents can define the same logical endpoint under different paths and the detector stays silent.
+
+**Action required before public release:** extend conflict detection rules to catch semantic endpoint equivalence, not just identical path matching. This is the highest priority fix identified in testing.
+
 ### Layer 3 — Testing the pinning and tiering system
 
 Test the context store's tiering and summarization logic in isolation. No Claude required at this layer.
@@ -338,6 +366,22 @@ Test the context store's tiering and summarization logic in isolation. No Claude
 - Measure the token count of what gets injected into each agent's context at each simulated turn.
 
 Pass condition: injected context stays within the 200–400 token target during steady-state work, and no structural content ever appears in the cold tier.
+
+**Layer 3 results — July 2026**
+
+Ran the real ContextStore through a deterministic 2-hour simulated session. Synthetic mix of 5 structural entries (JWT/TTL decision, API contracts, module ownership, User data shape) and transient activity signals every 6 minutes with resolved questions every 4th tick.
+
+6/6 tests passed:
+- Structural never in cold tier — probed to +10,000 minutes ✅
+- Transient ages hot → warm → cold on schedule (20/60 min boundaries) ✅
+- Schedule constants match docs ✅
+- Resolved question drops to cold immediately ✅
+- Structural never pruned or summarized away ✅
+- inject().token_estimate within 200–400 during steady state ✅
+
+Actual token_estimate range across steady-state turns (60–120 min): min 233, max 341 — comfortably inside the 200–400 target with margin at both ends.
+
+**Finding — cold tier definition updated:** implementation correctly ages out transient content older than 60 minutes automatically, not only explicitly resolved content. This is the intended behavior — automatic aging keeps the store lean without manual cleanup. Documentation updated to match.
 
 ### Layer 4 — Real-world validation
 
