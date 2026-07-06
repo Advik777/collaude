@@ -2,7 +2,7 @@
 
 **Collaborative multi-agent Claude Code for development teams.**
 
-Built by [Advik](https://github.com/Advik777).
+Built by [Advik](https://github.com/advik).
 
 ---
 
@@ -78,7 +78,21 @@ The host needs the broker dependencies. Teammates who only join never touch this
 
 ---
 
-## Starting a session
+## Before your first session
+
+One person on your team needs to be the designated host. That's the person who runs `/collaude start`. Before your session begins, the host needs a free ngrok account set up — it takes about 2 minutes.
+
+**Host setup (one time only):**
+```bash
+# 1. Sign up at https://ngrok.com (free)
+# 2. Get your authtoken from https://dashboard.ngrok.com/get-started/your-authtoken
+# 3. Run this once in your terminal:
+ngrok config add-authtoken YOUR_TOKEN_HERE
+```
+
+Do this before the session starts — not during. Everyone else on the team needs nothing beyond the skill folder.
+
+---
 
 The person starting the session runs:
 
